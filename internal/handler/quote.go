@@ -2,8 +2,8 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
+	"quote-api/internal/logger"
 	"time"
 )
 
@@ -16,19 +16,13 @@ type QuoteService interface {
 	RandomQuote(ctx context.Context) (string, error)
 }
 
-type Logger interface {
-	Info(msg string, kv ...any)
-	Error(msg string, kv ...any)
-	Sync() error
-}
-
 type QuoteHandler struct {
 	service QuoteService
 	cache   CacheStore
-	logger  Logger
+	logger  logger.Logger
 }
 
-func NewQuoteHandler(s QuoteService, c CacheStore, l Logger) *QuoteHandler {
+func NewQuoteHandler(s QuoteService, c CacheStore, l logger.Logger) *QuoteHandler {
 	return &QuoteHandler{
 		service: s,
 		cache:   c,
@@ -39,37 +33,38 @@ func NewQuoteHandler(s QuoteService, c CacheStore, l Logger) *QuoteHandler {
 func (h *QuoteHandler) GetQuote(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	w.Header().Set("Content-Type", "application/json") // move here
 	// try cache
 	val, err := h.cache.Get(ctx, "quote")
-	if err != nil {
-		h.logger.Error("Redis GET failed", "error", err)
-	} else {
-		h.logger.Info("Redis HIT", "value", val)
-	}
-	if err == nil {
-		json.NewEncoder(w).Encode(map[string]string{
+	if err == nil && val != "" {
+		writeJSON(w, http.StatusOK, map[string]string{
 			"quote":  val,
 			"source": "cache",
-		})
+		}, h.logger)
 		return
+	} else if err != nil {
+		h.logger.Info("cache get failed", "error", err)
 	}
 
 	quote, err := h.service.RandomQuote(ctx)
 	if err != nil {
-		http.Error(w, "failed to get quote", http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError,
+			map[string]string{"error": "failed to get quote"},
+			h.logger)
 		return
 	}
 
-	_ = h.cache.Set(ctx, "quote", quote, time.Minute)
+	if err := h.cache.Set(ctx, "quote", quote, time.Minute); err != nil {
+		h.logger.Error("cache set failed", "error", err)
+	}
 
-	json.NewEncoder(w).Encode(map[string]string{
-		"quote":  quote,
-		"source": "fresh",
-	})
+	writeJSON(w, http.StatusOK,
+		map[string]string{"quote": quote,
+			"source": "fresh"},
+		h.logger)
 }
 
 func (h *QuoteHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status": "ok",
+	}, h.logger)
 }

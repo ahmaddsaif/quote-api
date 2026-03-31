@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"quote-api/cache"
-	"quote-api/config"
-	"quote-api/handler"
-	"quote-api/logger"
-	"quote-api/service"
+	"quote-api/internal/cache"
+	"quote-api/internal/config"
+	"quote-api/internal/handler"
+	"quote-api/internal/logger"
+	"quote-api/internal/middleware"
+	"quote-api/internal/service"
 	"syscall"
 	"time"
 
@@ -34,13 +35,22 @@ func main() {
 	}
 	handler := handler.NewQuoteHandler(service, cache, zapLogger)
 
+	mux := http.NewServeMux()
+
 	// routes
-	http.HandleFunc("/quote", handler.GetQuote)
-	http.HandleFunc("/health", handler.HealthCheck)
+	mux.HandleFunc("/quote", handler.GetQuote)
+	mux.HandleFunc("/health", handler.HealthCheck)
+
+	// wrap with middleware
+	wrapped := middleware.Recovery(zapLogger)(
+		middleware.RequestID()(
+			middleware.Recovery(zapLogger)(mux),
+		),
+	)
 
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: nil,
+		Handler: wrapped,
 	}
 
 	go func() {

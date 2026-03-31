@@ -4,6 +4,12 @@ import (
 	"go.uber.org/zap"
 )
 
+type Logger interface {
+	Info(msg string, kv ...any)
+	Error(msg string, kv ...any)
+	Sync() error
+}
+
 type ZapLogger struct {
 	log *zap.SugaredLogger
 }
