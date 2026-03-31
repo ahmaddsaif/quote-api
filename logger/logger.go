@@ -1,13 +1,31 @@
 package logger
 
-import "go.uber.org/zap"
+import (
+	"go.uber.org/zap"
+)
 
-var Log *zap.Logger
+type ZapLogger struct {
+	log *zap.SugaredLogger
+}
 
-func Init() {
-	var err error
-	Log, err = zap.NewProduction()
+func NewZapLogger() (*ZapLogger, error) {
+	l, err := zap.NewProduction()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
+	return &ZapLogger{
+		log: l.Sugar(),
+	}, nil
+}
+
+func (z *ZapLogger) Info(msg string, kv ...any) {
+	z.log.Infow(msg, kv...)
+}
+
+func (z *ZapLogger) Error(msg string, kv ...any) {
+	z.log.Errorw(msg, kv...)
+}
+
+func (z *ZapLogger) Sync() error {
+	return z.log.Sync()
 }

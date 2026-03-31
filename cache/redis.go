@@ -2,23 +2,25 @@ package cache
 
 import (
 	"context"
-	"os"
-	"quote-api/logger"
+	"time"
 
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
-var Ctx = context.Background()
-var Rdb *redis.Client
+type RedisCache struct {
+	client *redis.Client
+}
 
-func Init() {
-	addr := os.Getenv("REDIS_ADDR")
-	logger.Log.Info("Redis addr", zap.String("addr", addr))
-	if addr == "" {
-		addr = "localhost:6379"
+func NewRedisCache(client *redis.Client) *RedisCache {
+	return &RedisCache{
+		client: client,
 	}
-	Rdb = redis.NewClient(&redis.Options{
-		Addr: addr,
-	})
+}
+
+func (r *RedisCache) Get(ctx context.Context, key string) (string, error) {
+	return r.client.Get(ctx, key).Result()
+}
+
+func (r *RedisCache) Set(ctx context.Context, key, value string, ttl time.Duration) error {
+	return r.client.Set(ctx, key, value, ttl).Err()
 }
